@@ -3,14 +3,14 @@ import time
 from datetime import date
 import random
 import mysql.connector
-from PySide6.QtWidgets import (a
+from PySide6.QtWidgets import (
     QApplication, QWidget, QLabel, QLineEdit, QPushButton,
     QVBoxLayout, QHBoxLayout, QMessageBox, QDialog, QFormLayout,
     QDateEdit, QInputDialog
 )
 from PySide6.QtGui import QFont
 from PySide6.QtCore import Qt
-from gpiozero import OutputDevice
+from gpiozero import OutputDevice, Buzzer
 
 # single age‑calculator used by both forms
 def calculate_age(qdate):
@@ -416,49 +416,86 @@ class LockerStatusWindow(QWidget):
         self.logged_in_user = logged_in_user
         self.login_window = login_window
 
-        # Solenoid lock GPIO pin setup using GPIO Zero
-        # Locks are initialized as unlocked, no need to trigger them on login
-        self.solenoid_lock_1 = OutputDevice(17, active_high=False, initial_value=False)  # Locker 1 (active LOW, initial value = locked)
-        self.solenoid_lock_2 = OutputDevice(27, active_high=False, initial_value=False)  # Locker 2 (active LOW, initial value = locked)
+        # Solenoid locks and buzzer setup (gpiozero)
+        self.solenoid_lock_1 = OutputDevice(17, active_high=False, initial_value=False)
+        self.solenoid_lock_2 = OutputDevice(27, active_high=False, initial_value=False)
+        self.buzzer = Buzzer(22)
 
+        # UI setup
         top = QHBoxLayout()
         lbl = QLabel(f"Welcome, {self.logged_in_user}")
-        lbl.setFont(QFont("Segoe UI", 20, QFont.Bold))
-        top.addWidget(lbl, alignment=Qt.AlignLeft)
-        back = QPushButton("←"); back.setFixedSize(40, 40); back.clicked.connect(self.go_back)
-        top.addWidget(back, alignment=Qt.AlignRight)
+        lbl.setFont(QFont("Segoe UI", 34, QFont.Weight.Bold))
+        top.addWidget(lbl, alignment=Qt.AlignmentFlag.AlignLeft)
+        back = QPushButton("←")
+        back.setFixedSize(40, 40)
+        back.clicked.connect(self.go_back)
+        top.addWidget(back, alignment=Qt.AlignmentFlag.AlignRight)
 
         self.title_labels = []
+        self.status_labels = []
         self.boxes = []
-        lockers = QHBoxLayout(); lockers.setSpacing(30)
+
+        lockers = QHBoxLayout()
+        lockers.setSpacing(30)
+
         for i in range(2):
-            col = QVBoxLayout(); col.setSpacing(10)
+            col = QVBoxLayout()
+            col.setSpacing(10)
+
             title = QLabel(f"Locker {i+1}")
-            title.setFont(QFont("Segoe UI", 16)); title.setAlignment(Qt.AlignCenter)
-            box = QLabel(""); box.setFixedSize(200, 200)
+            title.setFont(QFont("Segoe UI", 26, QFont.Weight.Bold))
+            title.setAlignment(Qt.AlignmentFlag.AlignCenter)
+
+            status = QLabel("Status: Closed")
+            status.setFont(QFont("Segoe UI", 16))
+            status.setAlignment(Qt.AlignmentFlag.AlignCenter)
+
+            box = QLabel("")
+            box.setFixedSize(400, 400)
             box.setStyleSheet("border:2px solid #2c3e50; border-radius:8px;")
             box.mousePressEvent = lambda e, idx=i: self.handle_locker_click(idx)
-            col.addWidget(title); col.addWidget(box, alignment=Qt.AlignCenter)
-            lockers.addLayout(col)
-            self.title_labels.append(title); self.boxes.append(box)
 
-        main = QVBoxLayout(); main.setContentsMargins(40, 20, 40, 20); main.setSpacing(30)
-        main.addLayout(top); main.addLayout(lockers)
+            col.addWidget(title)
+            col.addWidget(status)
+            col.addWidget(box, alignment=Qt.AlignmentFlag.AlignCenter)
+
+            lockers.addLayout(col)
+            self.title_labels.append(title)
+            self.status_labels.append(status)
+            self.boxes.append(box)
+
+        main = QVBoxLayout()
+        main.setContentsMargins(40, 20, 40, 20)
+        main.setSpacing(30)
+        main.addLayout(top)
+        main.addLayout(lockers)
         self.setLayout(main)
+
         self.update_lockers()
 
-    def go_back(self):
-        # Reset the GPIO states of the solenoid locks when logging out
-        self.solenoid_lock_1.off()  # Lock locker 1 (active low = locked)
-        self.solenoid_lock_2.off()  # Lock locker 2 (active low = locked)
+    def beep_opening(self):
+        for _ in range(2):
+            self.buzzer.on()
+            time.sleep(0.2)
+            self.buzzer.off()
+            time.sleep(0.1)
 
-        # Clean up GPIO pins
-        self.solenoid_lock_1.close()  # Release lock on GPIO pin 17
-        self.solenoid_lock_2.close()  # Release lock on GPIO pin 27
+    def beep_closing(self):
+        self.buzzer.on()
+        time.sleep(0.5)
+        self.buzzer.off()
+
+    def go_back(self):
+        self.solenoid_lock_1.off()
+        self.solenoid_lock_2.off()
+        self.buzzer.off()        # Turn off buzzer
+        self.solenoid_lock_1.close()
+        self.solenoid_lock_2.close()
+        self.buzzer.close()      # Properly release buzzer pin
 
         reply = QMessageBox.question(self, "Logout", "Do you want to log out?",
-                                     QMessageBox.Yes | QMessageBox.No)
-        if reply == QMessageBox.Yes:
+                                     QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+        if reply == QMessageBox.StandardButton.Yes:
             self.login_window.username_input.clear()
             self.login_window.password_input.clear()
             self.close()
@@ -482,12 +519,23 @@ class LockerStatusWindow(QWidget):
                     self.title_labels[i].setText(f"Locker {i+1} - {self.logged_in_user}")
                 else:
                     self.title_labels[i].setText(f"Locker {i+1}")
+
                 occupied = (i < len(rows) and rows[i][1] is not None)
-                color = "#e74c3c" if occupied else "#2ecc71"
+                if occupied:
+                    color = "#e74c3c"  # Red for occupied
+                    status_text = "Status: Closed"
+                else:
+                    color = "#2ecc71"  # Green for free
+                    status_text = "Status: Open"
+
                 self.boxes[i].setStyleSheet(
                     f"background-color: {color}; border:2px solid #2c3e50; border-radius:8px;"
                 )
-            cursor.close(); conn.close()
+                self.status_labels[i].setText(status_text)
+                self.status_labels[i].setStyleSheet(f"color: {color};")
+
+            cursor.close()
+            conn.close()
         except mysql.connector.Error as e:
             QMessageBox.critical(self, "Database Error", str(e))
 
@@ -505,7 +553,6 @@ class LockerStatusWindow(QWidget):
             assigned, obj = cursor.fetchone()
 
             if assigned is None:
-                # Locker is empty, prompt user to place an item
                 text, ok = QInputDialog.getText(self, f"Locker {locker_id}", "Enter object to place:")
                 if ok and text:
                     cursor.execute(
@@ -514,46 +561,63 @@ class LockerStatusWindow(QWidget):
                     )
                     conn.commit()
 
-                    # Unlock the locker for 5 seconds (only if it's empty)
                     if locker_id == 1:
-                        self.solenoid_lock_1.on()  # Unlock locker 1 (active low)
-                        time.sleep(5)  # Keep the locker open for 5 seconds
-                        self.solenoid_lock_1.off()  # Lock locker 1 again (active low)
+                        self.beep_opening()
+                        self.solenoid_lock_1.on()
+                        self.status_labels[0].setText("Status: Open")
+                        time.sleep(5)
+                        self.beep_closing()
+                        self.solenoid_lock_1.off()
+                        self.status_labels[0].setText("Status: Closed")
                     elif locker_id == 2:
-                        self.solenoid_lock_2.on()  # Unlock locker 2 (active low)
-                        time.sleep(5)  # Keep the locker open for 5 seconds
-                        self.solenoid_lock_2.off()  # Lock locker 2 again (active low)
+                        self.beep_opening()
+                        self.solenoid_lock_2.on()
+                        self.status_labels[1].setText("Status: Open")
+                        time.sleep(5)
+                        self.beep_closing()
+                        self.solenoid_lock_2.off()
+                        self.status_labels[1].setText("Status: Closed")
 
             elif assigned == user_id:
-                # Locker already contains an item for the user, ask to claim it
                 if QMessageBox.question(self, "Claim?", f"Claim '{obj}' from Locker {locker_id}?",
-                                        QMessageBox.Yes | QMessageBox.No) == QMessageBox.Yes:
+                                        QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No) == QMessageBox.StandardButton.Yes:
                     cursor.execute(
                         "UPDATE lockers SET user_id=NULL, object_in_locker=NULL WHERE locker_id=%s",
                         (locker_id,)
                     )
                     conn.commit()
 
-                    # Unlock the locker for 5 seconds when claiming the item
                     if locker_id == 1:
-                        self.solenoid_lock_1.on()  # Unlock locker 1 (active low)
-                        time.sleep(5)  # Keep the locker open for 5 seconds
-                        self.solenoid_lock_1.off()  # Lock locker 1 again (active low)
+                        self.beep_opening()
+                        self.solenoid_lock_1.on()
+                        self.status_labels[0].setText("Status: Open")
+                        time.sleep(5)
+                        self.beep_closing()
+                        self.solenoid_lock_1.off()
+                        self.status_labels[0].setText("Status: Closed")
                     elif locker_id == 2:
-                        self.solenoid_lock_2.on()  # Unlock locker 2 (active low)
-                        time.sleep(5)  # Keep the locker open for 5 seconds
-                        self.solenoid_lock_2.off()  # Lock locker 2 again (active low)
-
+                        self.beep_opening()
+                        self.solenoid_lock_2.on()
+                        self.status_labels[1].setText("Status: Open")
+                        time.sleep(5)
+                        self.beep_closing()
+                        self.solenoid_lock_2.off()
+                        self.status_labels[1].setText("Status: Closed")
             else:
                 QMessageBox.warning(self, "Denied", "Not your locker.")
-            cursor.close(); conn.close()
+
+            cursor.close()
+            conn.close()
             self.update_lockers()
         except mysql.connector.Error as e:
             QMessageBox.critical(self, "Database Error", str(e))
 
+            
 if __name__ == "__main__":
     app = QApplication(sys.argv)
     window = LockerSystem()
     window.show()
     sys.exit(app.exec())
+
+
 
