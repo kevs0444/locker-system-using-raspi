@@ -29,7 +29,7 @@ class LockerSystem(QWidget):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("System Shapers' Smart Lock System")
-        self.setFixedSize(1000, 700)
+        self.setFixedSize(1100, 700)
         self.setStyleSheet(f"""
             QWidget {{ background-color: {BG_COLOR}; font-family: {WIDGET_FONT}; }}
             QLabel {{ color: {TEXT_COLOR}; }}
@@ -145,7 +145,7 @@ class RegisterWindow(QDialog):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Register New User")
-        self.setFixedSize(1000, 700)
+        self.setFixedSize(1100, 700)
         self.setStyleSheet(f"""
             QDialog {{ background-color: {BG_COLOR}; font-family: {WIDGET_FONT}; }}
             QLabel {{ color: {TEXT_COLOR}; font-size:16px; }}
@@ -171,15 +171,16 @@ class RegisterWindow(QDialog):
 
         self.nm = QLineEdit()
         form.addRow("Name:", self.nm)
+        self.nm.editingFinished.connect(self.check_name_birthday_availability)
 
         self.bd = QDateEdit(calendarPopup=True)
         self.bd.setDisplayFormat("MM/dd/yyyy")
         self.bd.setDate(date.today())
         form.addRow("Birthday:", self.bd)
+        self.bd.dateChanged.connect(self.on_bd_change)
 
         self.age_lbl = QLabel()
         form.addRow("Age:", self.age_lbl)
-        self.bd.dateChanged.connect(self.on_bd_change)
         self.on_bd_change(self.bd.date())
 
         self.btn = QPushButton("Register")
@@ -211,6 +212,26 @@ class RegisterWindow(QDialog):
         except Exception as e:
             QMessageBox.critical(self, "Database Error", str(e))
 
+    def check_name_birthday_availability(self):
+        name = self.nm.text().strip()
+        birthday = self.bd.date().toString("yyyy-MM-dd")
+        if not name:
+            return
+        try:
+            conn = mysql.connector.connect(
+                host="localhost", user="adminuser", password="adminpass", database="locker_system"
+            )
+            c = conn.cursor()
+            c.execute("SELECT 1 FROM users WHERE name=%s AND birthday=%s", (name, birthday))
+            if c.fetchone():
+                QMessageBox.warning(self, "Duplicate Detected", f"A user with the name '{name}' and birthday '{birthday}' already exists.")
+                self.nm.clear()
+                self.nm.setFocus()
+            c.close()
+            conn.close()
+        except Exception as e:
+            QMessageBox.critical(self, "Database Error", str(e))
+
     def save(self):
         username = self.un.text().strip()
         password = self.pw.text().strip()
@@ -228,7 +249,7 @@ class RegisterWindow(QDialog):
             )
             c = conn.cursor()
 
-            # Check duplicate username
+            # Final check for duplicate username
             c.execute("SELECT 1 FROM users WHERE username=%s", (username,))
             if c.fetchone():
                 QMessageBox.warning(self, "Duplicate Username", "This username is already taken.")
@@ -236,7 +257,7 @@ class RegisterWindow(QDialog):
                 conn.close()
                 return
 
-            # Check duplicate name + birthday
+            # Final check for duplicate name + birthday
             c.execute("SELECT 1 FROM users WHERE name=%s AND birthday=%s", (name, birthday))
             if c.fetchone():
                 QMessageBox.warning(self, "Duplicate User", "A user with the same name and birthday already exists.")
@@ -244,7 +265,7 @@ class RegisterWindow(QDialog):
                 conn.close()
                 return
 
-            # Insert new user
+            # Register user
             c.execute(
                 "INSERT INTO users(username, password, name, age, birthday, role) VALUES (%s, %s, %s, %s, %s, 'user')",
                 (username, password, name, age, birthday)
@@ -258,13 +279,12 @@ class RegisterWindow(QDialog):
         except Exception as e:
             QMessageBox.critical(self, "Database Error", str(e))
 
-
 class ForgotWindow(QDialog):
     def __init__(self, username, parent=None):
         super().__init__(parent)
         self.username = username
         self.setWindowTitle("Forgot Password")
-        self.setFixedSize(1000, 700)
+        self.setFixedSize(1100, 700)
         self.setStyleSheet(f"""
             QDialog {{ background-color: {BG_COLOR}; font-family: {WIDGET_FONT}; }}
             QLabel {{ color: {TEXT_COLOR}; font-size: 16px; }}
@@ -392,7 +412,7 @@ class LockerStatusWindow(QWidget):
     def __init__(self, logged_in_user, login_window):
         super().__init__()
         self.setWindowTitle("Locker Status")
-        self.setFixedSize(1000, 700)
+        self.setFixedSize(1100, 700)
         self.logged_in_user = logged_in_user
         self.login_window = login_window
 
@@ -431,7 +451,7 @@ class LockerStatusWindow(QWidget):
             status.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
             box = QLabel("")
-            box.setFixedSize(400, 400)
+            box.setFixedSize(400, 300)
             box.setStyleSheet("border:2px solid #2c3e50; border-radius:8px;")
             box.mousePressEvent = lambda e, idx=i: self.handle_locker_click(idx)
 
@@ -476,6 +496,7 @@ class LockerStatusWindow(QWidget):
         reply = QMessageBox.question(self, "Logout", "Do you want to log out?",
                                      QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
         if reply == QMessageBox.StandardButton.Yes:
+            QMessageBox.information(self, "Thank You", "Thank you for using the Locker system!")
             self.login_window.username_input.clear()
             self.login_window.password_input.clear()
             self.close()
@@ -583,6 +604,8 @@ class LockerStatusWindow(QWidget):
                         self.beep_closing()
                         self.solenoid_lock_2.off()
                         self.status_labels[1].setText("Status: Closed")
+
+                    QMessageBox.information(self, "Thank You", "Thank you for using the Locker system!")
             else:
                 QMessageBox.warning(self, "Denied", "Not your locker.")
 
@@ -592,7 +615,6 @@ class LockerStatusWindow(QWidget):
         except mysql.connector.Error as e:
             QMessageBox.critical(self, "Database Error", str(e))
 
-            
 if __name__ == "__main__":
     app = QApplication(sys.argv)
     window = LockerSystem()
