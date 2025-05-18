@@ -141,7 +141,6 @@ class LockerSystem(QWidget):
         except Exception as e:
             QMessageBox.critical(self, "Database Error", str(e))
 
-
 class RegisterWindow(QDialog):
     def __init__(self):
         super().__init__()
@@ -162,16 +161,24 @@ class RegisterWindow(QDialog):
         form.setHorizontalSpacing(20)
         form.setVerticalSpacing(15)
 
-        self.un = QLineEdit(); form.addRow("Username:", self.un)
-        self.pw = QLineEdit(); self.pw.setEchoMode(QLineEdit.Password); form.addRow("Password:", self.pw)
-        self.nm = QLineEdit(); form.addRow("Name:", self.nm)
+        self.un = QLineEdit()
+        form.addRow("Username:", self.un)
+        self.un.editingFinished.connect(self.check_username_availability)
+
+        self.pw = QLineEdit()
+        self.pw.setEchoMode(QLineEdit.Password)
+        form.addRow("Password:", self.pw)
+
+        self.nm = QLineEdit()
+        form.addRow("Name:", self.nm)
 
         self.bd = QDateEdit(calendarPopup=True)
         self.bd.setDisplayFormat("MM/dd/yyyy")
         self.bd.setDate(date.today())
         form.addRow("Birthday:", self.bd)
 
-        self.age_lbl = QLabel(); form.addRow("Age:", self.age_lbl)
+        self.age_lbl = QLabel()
+        form.addRow("Age:", self.age_lbl)
         self.bd.dateChanged.connect(self.on_bd_change)
         self.on_bd_change(self.bd.date())
 
@@ -183,101 +190,74 @@ class RegisterWindow(QDialog):
 
     def on_bd_change(self, d):
         age = calculate_age(d)
-        if age >= 0:
-            self.age_lbl.setText(str(age))
-        else:
-            self.age_lbl.setText("")
+        self.age_lbl.setText(str(age) if age >= 0 else "")
 
-    def save(self):
+    def check_username_availability(self):
+        username = self.un.text().strip()
+        if not username:
+            return
         try:
             conn = mysql.connector.connect(
                 host="localhost", user="adminuser", password="adminpass", database="locker_system"
             )
             c = conn.cursor()
-            c.execute(
-                "INSERT INTO users(username, password, name, age, birthday, role) VALUES (%s, %s, %s, %s, %s, 'user')",
-                (
-                    self.un.text(),
-                    self.pw.text(),
-                    self.nm.text(),
-                    calculate_age(self.bd.date()),
-                    self.bd.date().toString("yyyy-MM-dd")
-                )
-            )
-            conn.commit()
-            QMessageBox.information(self, "Success", "Registered!")
-            self.accept()
+            c.execute("SELECT 1 FROM users WHERE username=%s", (username,))
+            if c.fetchone():
+                QMessageBox.warning(self, "Username Taken", f"The username '{username}' is already in use.")
+                self.un.clear()
+                self.un.setFocus()
+            c.close()
+            conn.close()
         except Exception as e:
-            QMessageBox.critical(self, "Error", str(e))
-
-
-class RegisterWindow(QDialog):
-    def __init__(self):
-        super().__init__()
-        self.setWindowTitle("Register New User")
-        self.setFixedSize(1000, 700)
-        self.setStyleSheet(f"""
-            QDialog {{ background-color: {BG_COLOR}; font-family: {WIDGET_FONT}; }}
-            QLabel {{ color: {TEXT_COLOR}; font-size:16px; }}
-            QLineEdit, QDateEdit {{ background-color:white; border:1px solid {BORDER_COLOR}; border-radius:8px; padding:8px; }}
-            QPushButton {{ background-color: {ACCENT_COLOR}; color:white; border:none; border-radius:8px; padding:8px 16px; }}
-            QPushButton:hover {{ background-color: {ACCENT_HOVER}; }}
-            QPushButton:disabled {{ background-color:#95a5a6; }}
-        """)
-
-        form = QFormLayout()
-        form.setLabelAlignment(Qt.AlignRight)
-        form.setFormAlignment(Qt.AlignCenter)
-        form.setHorizontalSpacing(20)
-        form.setVerticalSpacing(15)
-
-        self.un = QLineEdit(); form.addRow("Username:", self.un)
-        self.pw = QLineEdit(); self.pw.setEchoMode(QLineEdit.Password); form.addRow("Password:", self.pw)
-        self.nm = QLineEdit(); form.addRow("Name:", self.nm)
-
-        self.bd = QDateEdit(calendarPopup=True)
-        self.bd.setDisplayFormat("MM/dd/yyyy")
-        self.bd.setDate(date.today())
-        form.addRow("Birthday:", self.bd)
-
-        self.age_lbl = QLabel(); form.addRow("Age:", self.age_lbl)
-        self.bd.dateChanged.connect(self.on_bd_change)
-        self.on_bd_change(self.bd.date())
-
-        self.btn = QPushButton("Register")
-        self.btn.clicked.connect(self.save)
-        form.addRow("", self.btn)
-
-        self.setLayout(form)
-
-    def on_bd_change(self, d):
-        age = calculate_age(d)
-        if age >= 0:
-            self.age_lbl.setText(str(age))
-        else:
-            self.age_lbl.setText("")
+            QMessageBox.critical(self, "Database Error", str(e))
 
     def save(self):
+        username = self.un.text().strip()
+        password = self.pw.text().strip()
+        name = self.nm.text().strip()
+        birthday = self.bd.date().toString("yyyy-MM-dd")
+        age = calculate_age(self.bd.date())
+
+        if not username or not password or not name:
+            QMessageBox.warning(self, "Input Error", "Please fill in all required fields.")
+            return
+
         try:
             conn = mysql.connector.connect(
                 host="localhost", user="adminuser", password="adminpass", database="locker_system"
             )
             c = conn.cursor()
+
+            # Check duplicate username
+            c.execute("SELECT 1 FROM users WHERE username=%s", (username,))
+            if c.fetchone():
+                QMessageBox.warning(self, "Duplicate Username", "This username is already taken.")
+                c.close()
+                conn.close()
+                return
+
+            # Check duplicate name + birthday
+            c.execute("SELECT 1 FROM users WHERE name=%s AND birthday=%s", (name, birthday))
+            if c.fetchone():
+                QMessageBox.warning(self, "Duplicate User", "A user with the same name and birthday already exists.")
+                c.close()
+                conn.close()
+                return
+
+            # Insert new user
             c.execute(
                 "INSERT INTO users(username, password, name, age, birthday, role) VALUES (%s, %s, %s, %s, %s, 'user')",
-                (
-                    self.un.text(),
-                    self.pw.text(),
-                    self.nm.text(),
-                    calculate_age(self.bd.date()),
-                    self.bd.date().toString("yyyy-MM-dd")
-                )
+                (username, password, name, age, birthday)
             )
             conn.commit()
-            QMessageBox.information(self, "Success", "Registered!")
+            c.close()
+            conn.close()
+
+            QMessageBox.information(self, "Success", "Registered successfully!")
             self.accept()
         except Exception as e:
-            QMessageBox.critical(self, "Error", str(e))
+            QMessageBox.critical(self, "Database Error", str(e))
+
 
 class ForgotWindow(QDialog):
     def __init__(self, username, parent=None):
@@ -618,6 +598,5 @@ if __name__ == "__main__":
     window = LockerSystem()
     window.show()
     sys.exit(app.exec())
-
 
 
