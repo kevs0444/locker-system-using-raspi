@@ -8,7 +8,7 @@ from PySide6.QtWidgets import (
     QVBoxLayout, QHBoxLayout, QMessageBox, QDialog, QFormLayout,
     QDateEdit, QInputDialog
 )
-from PySide6.QtGui import QFont
+from PySide6.QtGui import QFont, QIcon
 from PySide6.QtCore import Qt
 from gpiozero import OutputDevice, Buzzer
 
@@ -28,19 +28,43 @@ WIDGET_FONT = "Segoe UI"
 class LockerSystem(QWidget):
     def __init__(self):
         super().__init__()
+
+        # Set window title and icon
         self.setWindowTitle("System Shapers' Smart Lock System")
+        self.setWindowIcon(QIcon("/home/SystemShapers/LockerSystem/icon.png"))
         self.setFixedSize(1100, 700)
+
+        # Apply global stylesheet
         self.setStyleSheet(f"""
-            QWidget {{ background-color: {BG_COLOR}; font-family: {WIDGET_FONT}; }}
-            QLabel {{ color: {TEXT_COLOR}; }}
-            QLineEdit {{ background-color: white; border:1px solid {BORDER_COLOR}; border-radius:8px; padding:12px; }}
-            QPushButton {{ background-color: {ACCENT_COLOR}; color:white; border:none; border-radius:8px; padding:12px 24px; }}
-            QPushButton:hover {{ background-color: {ACCENT_HOVER}; }}
+            QWidget {{
+                background-color: {BG_COLOR};
+                font-family: {WIDGET_FONT};
+            }}
+            QLabel {{
+                color: {TEXT_COLOR};
+            }}
+            QLineEdit {{
+                background-color: white;
+                border: 1px solid {BORDER_COLOR};
+                border-radius: 8px;
+                padding: 12px;
+            }}
+            QPushButton {{
+                background-color: white;
+                color: black;
+                border: 2px solid black;
+                border-radius: 8px;
+                padding: 12px 24px;
+            }}
+            QPushButton:hover {{
+                background-color: black;
+                color: white;
+            }}
         """)
 
         # Title
         title = QLabel("System Shapers' Smart Lock System", alignment=Qt.AlignCenter)
-        title.setFont(QFont("Segoe UI", 28, QFont.Bold))
+        title.setFont(QFont("Segoe UI", 38, QFont.Bold))
 
         # Username input
         self.username_input = QLineEdit()
@@ -58,17 +82,14 @@ class LockerSystem(QWidget):
         # Buttons
         login_btn = QPushButton("Login")
         login_btn.setFont(QFont("Segoe UI", 18))
-        login_btn.setStyleSheet("padding: 12px 24px;")
         login_btn.clicked.connect(self.login)
 
         reg_btn = QPushButton("Register")
         reg_btn.setFont(QFont("Segoe UI", 18))
-        reg_btn.setStyleSheet("padding: 12px 24px;")
         reg_btn.clicked.connect(self.register_user)
 
         fp_btn = QPushButton("Forgot Password")
         fp_btn.setFont(QFont("Segoe UI", 18))
-        fp_btn.setStyleSheet("padding: 12px 24px;")
         fp_btn.clicked.connect(self.forgot_password)
 
         # Layouts
@@ -99,7 +120,7 @@ class LockerSystem(QWidget):
                 host="localhost", user="adminuser", password="adminpass", database="locker_system"
             )
             c = conn.cursor()
-            c.execute("SELECT * FROM users WHERE username=%s AND password=%s", (u, p))
+            c.execute("SELECT * FROM users WHERE BINARY username=%s AND password=%s", (u, p))
             if c.fetchone():
                 QMessageBox.information(self, "Login", "Welcome " + u + "!")
                 self.hide()
@@ -135,7 +156,7 @@ class LockerSystem(QWidget):
             conn.close()
 
             if result:
-                ForgotWindow(username, self).exec()  # ✅ Correct usage
+                ForgotWindow(username, self).exec()
             else:
                 QMessageBox.warning(self, "User Not Found", "The username you entered does not exist.")
         except Exception as e:
@@ -147,47 +168,91 @@ class RegisterWindow(QDialog):
         self.setWindowTitle("Register New User")
         self.setFixedSize(1100, 700)
         self.setStyleSheet(f"""
-            QDialog {{ background-color: {BG_COLOR}; font-family: {WIDGET_FONT}; }}
-            QLabel {{ color: {TEXT_COLOR}; font-size:16px; }}
-            QLineEdit, QDateEdit {{ background-color:white; border:1px solid {BORDER_COLOR}; border-radius:8px; padding:8px; }}
-            QPushButton {{ background-color: {ACCENT_COLOR}; color:white; border:none; border-radius:8px; padding:8px 16px; }}
-            QPushButton:hover {{ background-color: {ACCENT_HOVER}; }}
-            QPushButton:disabled {{ background-color:#95a5a6; }}
+            QDialog {{
+                background-color: {BG_COLOR};
+                font-family: {WIDGET_FONT};
+            }}
+            QLabel {{
+                color: {TEXT_COLOR};
+                font-size: 18px;
+            }}
+            QLineEdit, QDateEdit {{
+                background-color: white;
+                border: 1px solid {BORDER_COLOR};
+                border-radius: 8px;
+                padding: 12px;
+                font-size: 16px;
+            }}
+            QPushButton {{
+                background-color: white;
+                color: black;
+                border: 2px solid black;
+                border-radius: 8px;
+                padding: 12px 24px;
+                font-size: 16px;
+            }}
+            QPushButton:hover {{
+                background-color: black;
+                color: white;
+            }}
+            QPushButton:disabled {{
+                background-color: #95a5a6;
+                color: white;
+            }}
         """)
 
+        # Build form layout
         form = QFormLayout()
         form.setLabelAlignment(Qt.AlignRight)
         form.setFormAlignment(Qt.AlignCenter)
-        form.setHorizontalSpacing(20)
-        form.setVerticalSpacing(15)
+        form.setHorizontalSpacing(40)
+        form.setVerticalSpacing(20)
 
+        # Username
         self.un = QLineEdit()
         form.addRow("Username:", self.un)
         self.un.editingFinished.connect(self.check_username_availability)
 
+        # Password
         self.pw = QLineEdit()
         self.pw.setEchoMode(QLineEdit.Password)
         form.addRow("Password:", self.pw)
 
+        # Name
         self.nm = QLineEdit()
         form.addRow("Name:", self.nm)
         self.nm.editingFinished.connect(self.check_name_birthday_availability)
 
+        # Birthday
         self.bd = QDateEdit(calendarPopup=True)
         self.bd.setDisplayFormat("MM/dd/yyyy")
         self.bd.setDate(date.today())
         form.addRow("Birthday:", self.bd)
         self.bd.dateChanged.connect(self.on_bd_change)
 
+        # Age label (readonly)
         self.age_lbl = QLabel()
         form.addRow("Age:", self.age_lbl)
         self.on_bd_change(self.bd.date())
 
+        # Register button
         self.btn = QPushButton("Register")
         self.btn.clicked.connect(self.save)
         form.addRow("", self.btn)
 
-        self.setLayout(form)
+        # Back to Login button
+        self.back_btn = QPushButton("Back to Login")
+        self.back_btn.clicked.connect(self.close)
+        form.addRow("", self.back_btn)
+
+        # Wrap form inside a central layout to make it bigger and padded like the login
+        container = QVBoxLayout()
+        container.setContentsMargins(80, 80, 80, 80)
+        container.addStretch()
+        container.addLayout(form)
+        container.addStretch()
+
+        self.setLayout(container)
 
     def on_bd_change(self, d):
         age = calculate_age(d)
@@ -249,7 +314,7 @@ class RegisterWindow(QDialog):
             )
             c = conn.cursor()
 
-            # Final check for duplicate username
+            # Final duplicate checks
             c.execute("SELECT 1 FROM users WHERE username=%s", (username,))
             if c.fetchone():
                 QMessageBox.warning(self, "Duplicate Username", "This username is already taken.")
@@ -257,7 +322,6 @@ class RegisterWindow(QDialog):
                 conn.close()
                 return
 
-            # Final check for duplicate name + birthday
             c.execute("SELECT 1 FROM users WHERE name=%s AND birthday=%s", (name, birthday))
             if c.fetchone():
                 QMessageBox.warning(self, "Duplicate User", "A user with the same name and birthday already exists.")
@@ -284,24 +348,35 @@ class ForgotWindow(QDialog):
         super().__init__(parent)
         self.username = username
         self.setWindowTitle("Forgot Password")
-        self.setFixedSize(1100, 700)
+        self.setFixedSize(1100, 700)  # Window size remains the same
+
         self.setStyleSheet(f"""
-            QDialog {{ background-color: {BG_COLOR}; font-family: {WIDGET_FONT}; }}
-            QLabel {{ color: {TEXT_COLOR}; font-size: 16px; }}
+            QDialog {{
+                background-color: {BG_COLOR};
+                font-family: {WIDGET_FONT};
+            }}
+            QLabel {{
+                color: {TEXT_COLOR};
+                font-size: 16px;
+            }}
             QLineEdit, QDateEdit {{
                 background-color: white;
                 border: 1px solid {BORDER_COLOR};
                 border-radius: 8px;
-                padding: 8px;
+                padding: 12px;
+                font-size: 18px;
             }}
             QPushButton {{
-                background-color: {ACCENT_COLOR};
+                background-color: black;
                 color: white;
                 border: none;
                 border-radius: 8px;
-                padding: 8px 16px;
+                padding: 12px 24px;
+                font-size: 18px;
             }}
-            QPushButton:hover {{ background-color: {ACCENT_HOVER}; }}
+            QPushButton:hover {{
+                background-color: #333;
+            }}
         """)
 
         form = QFormLayout()
@@ -361,7 +436,11 @@ class ForgotWindow(QDialog):
                 database="locker_system"
             )
             c = conn.cursor()
-            c.execute("SELECT user_id FROM users WHERE username=%s AND name=%s AND birthday=%s AND age=%s", (self.username, fn, bd, ag))
+            c.execute("""
+                SELECT user_id FROM users
+                WHERE BINARY username=%s AND BINARY name=%s AND birthday=%s AND age=%s
+            """, (self.username, fn, bd, ag))
+
             r = c.fetchone()
             if r:
                 self.uid = r[0]
@@ -406,7 +485,8 @@ class ForgotWindow(QDialog):
             c.close()
             conn.close()
         except Exception as e:
-            QMessageB
+            QMessageBox.critical(self, "Error", str(e))
+
 
 class LockerStatusWindow(QWidget):
     def __init__(self, logged_in_user, login_window):
