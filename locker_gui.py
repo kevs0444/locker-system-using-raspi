@@ -1,6 +1,5 @@
 import sys
 import time
-from datetime import date
 import random
 import mysql.connector
 from PySide6.QtWidgets import (
@@ -11,7 +10,8 @@ from PySide6.QtWidgets import (
 from PySide6.QtGui import QFont, QIcon
 from PySide6.QtCore import Qt
 from gpiozero import OutputDevice, Buzzer
-
+from datetime import date
+from admin_login_gui import AdminViewer  # or use the class inline if not using a separate file
 # single age‑calculator used by both forms
 def calculate_age(qdate):
     today = date.today()
@@ -120,12 +120,18 @@ class LockerSystem(QWidget):
                 host="localhost", user="adminuser", password="adminpass", database="locker_system"
             )
             c = conn.cursor()
-            c.execute("SELECT * FROM users WHERE BINARY username=%s AND password=%s", (u, p))
-            if c.fetchone():
+            c.execute("SELECT role FROM users WHERE BINARY username=%s AND password=%s", (u, p))
+            result = c.fetchone()
+            if result:
+                role = result[0]
                 QMessageBox.information(self, "Login", "Welcome " + u + "!")
                 self.hide()
-                self.lw = LockerStatusWindow(u, self)
-                self.lw.show()
+                if role == "admin":
+                    self.admin_win = AdminViewer()
+                    self.admin_win.show()
+                else:
+                    self.lw = LockerStatusWindow(u, self)
+                    self.lw.show()
             else:
                 QMessageBox.critical(self, "Login Failed", "Invalid credentials.")
             c.close()
@@ -161,6 +167,17 @@ class LockerSystem(QWidget):
                 QMessageBox.warning(self, "User Not Found", "The username you entered does not exist.")
         except Exception as e:
             QMessageBox.critical(self, "Database Error", str(e))
+
+class AdminWindow(QWidget):
+    def __init__(self, admin_user, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Admin Panel")
+        self.setFixedSize(800, 600)
+        layout = QVBoxLayout()
+        label = QLabel(f"Welcome Admin, {admin_user}")
+        label.setFont(QFont("Segoe UI", 28))
+        layout.addWidget(label, alignment=Qt.AlignmentFlag.AlignCenter)
+        self.setLayout(layout)
 
 class RegisterWindow(QDialog):
     def __init__(self):
