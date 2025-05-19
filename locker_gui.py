@@ -168,17 +168,6 @@ class LockerSystem(QWidget):
         except Exception as e:
             QMessageBox.critical(self, "Database Error", str(e))
 
-class AdminWindow(QWidget):
-    def __init__(self, admin_user, parent=None):
-        super().__init__(parent)
-        self.setWindowTitle("Admin Panel")
-        self.setFixedSize(800, 600)
-        layout = QVBoxLayout()
-        label = QLabel(f"Welcome Admin, {admin_user}")
-        label.setFont(QFont("Segoe UI", 28))
-        layout.addWidget(label, alignment=Qt.AlignmentFlag.AlignCenter)
-        self.setLayout(layout)
-
 class RegisterWindow(QDialog):
     def __init__(self):
         super().__init__()
